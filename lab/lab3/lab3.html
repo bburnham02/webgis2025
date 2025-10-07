@@ -38,3 +38,34 @@ layerswitcher.css" />
 
   var wms = new ol.layer.Tile({
     title: 'States',
+    source: new ol.source.TileWMS({
+url: 'https://ahocevar.com/geoserver/wms',
+      params: {
+        'LAYERS': 'topp:states',
+        'TILED': true,
+        'FORMAT': 'image/png',
+        'TRANSPARENT': true
+      },
+      serverType: 'geoserver',
+      transition: 0
+    })
+  });
+
+  var baseGroup = new ol.layer.Group({
+    title: 'Base maps',
+    layers: [azureRoad, OSM]
+  });
+
+  var map = new ol.Map({
+    target: 'map',
+    layers: [baseGroup, wms],
+    view: new ol.View({
+      center: [-10997148, 4569099],
+      zoom: 4
+    })
+  });
+
+  map.addControl(new ol.control.LayerSwitcher({ tipLabel: 'Legend' }));
+  </script>
+  </body>
+</html>
