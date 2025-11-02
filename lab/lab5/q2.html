@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Leaflet Basemap & WMS Switcher with GIS Layers</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      width: 100%;
+    }
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+    .controls {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 10px;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      font-family: sans-serif;
+      z-index: 1000;
+      max-height: 90%;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div class="controls">
+    <div>
+      <strong>Basemap:</strong><br>
+      <label><input type="radio" name="basemap" value="osm" checked> OSM</label><br>
+      <label><input type="radio" name="basemap" value="esri"> ESRI Imagery</label>
+    </div>
+    <hr>
+    <div>
+      <strong>Overlays:</strong><br>
+      <label><input type="checkbox" id="wmsToggle"> WMS: topp:states</label><br>
+      <label><input type="checkbox" id="populationToggle"> Population Density</label><br>
+      <label><input type="checkbox" id="elevationToggle"> Elevation</label><br>
+      <label><input type="checkbox" id="precipitationToggle"> Live Precipitation</label>
+    </div>
+  </div>
+
+  <script>
+    const map = L.map('map', {
+      center: [39.833333, -98.583333],
+      zoom: 4
+    });
+
+    // Base layers
+    const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    const esriLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      attribution: 'Tiles &copy; Esri'
+    });
+
+    // WMS and overlay layers
+    const wmsLayer = L.tileLayer.wms('https://ahocevar.com/geoserver/wms', {
+      layers: 'topp:states',
+      format: 'image/png',
+      transparent: true,
+      version: '1.1.1'
+    });
+
+    // Alternate global population WMS (WorldPop)
+    const populationLayer = L.tileLayer.wms('https://wms.worldpop.org/geoserver/ows?', {
+      layers: 'wp_pop_global_2020',
+      format: 'image/png',
+      transparent: true,
+      attribution: 'WorldPop Global Population Density 2020'
+    });
+
+    // Elevation WMS (Mundialis)
+    const elevationLayer = L.tileLayer.wms('https://ows.mundialis.de/services/service?', {
+      layers: 'SRTM30-Colored-Hillshade',
+      format: 'image/png',
+      transparent: true,
+      attribution: 'Mundialis Elevation Data'
+    });
+
+    // Live precipitation WMS (Iowa State Mesonet NEXRAD)
+    const precipitationLayer = L.tileLayer.wms('https://mesonet.agron.iastate.edu/cgi-bin/wms/nexrad/n0r.cgi?', {
+      layers: 'nexrad-n0r',
+      format: 'image/png',
+      transparent: true,
+      attribution: 'Iowa State Mesonet Live NEXRAD Precipitation'
+    });
+
+    // Basemap switcher
+    document.querySelectorAll('input[name="basemap"]').forEach(radio => {
+      radio.addEventListener('change', (e) => {
+        const selected = e.target.value;
+        if (selected === 'osm') {
+          map.addLayer(osmLayer);
+          map.removeLayer(esriLayer);
+        } else if (selected === 'esri') {
+          map.addLayer(esriLayer);
+          map.removeLayer(osmLayer);
+        }
+      });
+    });
+
+    // Overlay toggles
+    document.getElementById('wmsToggle').addEventListener('change', (e) => {
+      e.target.checked ? map.addLayer(wmsLayer) : map.removeLayer(wmsLayer);
+    });
+
+    document.getElementById('populationToggle').addEventListener('change', (e) => {
+      e.target.checked ? map.addLayer(populationLayer) : map.removeLayer(populationLayer);
+    });
+
+    document.getElementById('elevationToggle').addEventListener('change', (e) => {
+      e.target.checked ? map.addLayer(elevationLayer) : map.removeLayer(elevationLayer);
+    });
+
+    document.getElementById('precipitationToggle').addEventListener('change', (e) => {
+      e.target.checked ? map.addLayer(precipitationLayer) : map.removeLayer(precipitationLayer);
+    });
+  </script>
+</body>
+</html>
