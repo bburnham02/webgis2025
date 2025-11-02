@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenLayers Map App</title>
+    <!-- OpenLayers CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v9.1.0/ol.css">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Set base font */
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden; /* Prevent body scroll */
+        }
+        /* Ensure map fills the screen */
+        #map {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 0;
+        }
+        
+        /* Style for the control panel (ensuring absolute positioning for drag-n-drop) */
+        #controls {
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            z-index: 10;
+        }
+
+        /* Style for the Scale Line control */
+        .ol-scale-line {
+            position: absolute;
+            bottom: 1rem;
+            left: 1rem;
+            z-index: 5; /* Place scale bar below controls */
+            background: rgba(255, 255, 255, 0.85);
+            padding: 5px 8px;
+            border-radius: 6px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            font-size: 0.875rem; /* text-sm */
+            color: #333;
+        }
+
+        /* Ensure OL default text is visible */
+        .ol-scale-line-inner {
+            border: 1px solid #333 !important;
+            border-top: none !important;
+            color: #333 !important;
+            font-weight: 500;
+        }
+
+        /* --- Custom North Arrow Styling --- */
+        .ol-rotate {
+            /* Override default OL position (top/right) to bottom/left */
+            top: unset !important; 
+            right: unset !important; 
+            left: 1.5rem; /* Adjusted slightly to align well */
+            bottom: 5rem; /* Positioned above the scale bar */
+        }
+
+        .ol-rotate button {
+            /* Clear default OL styles and apply custom look */
+            background: white !important;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            border: none !important;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: visible; /* Allows the arrow tip to be drawn outside the circle */
+            line-height: 1; /* Normalize line height */
+            /* Clear default OL image */
+            background-image: none !important; 
+        }
+        
+        /* Custom 'N' text */
+        .ol-rotate button::after {
+            content: 'N';
+            font-size: 16px;
+            font-weight: 900;
+            color: #1e40af; /* Tailwind blue-800 for the letter */
+            position: relative;
+            z-index: 2;
+        }
+
+        /* Custom Arrow Tip */
+        .ol-rotate button::before {
+            content: '▲'; /* Up arrow Unicode for the tip */
+            font-size: 10px;
+            line-height: 1;
+            color: #dc2626; /* Tailwind red-600 for the arrow */
+            position: absolute;
+            top: -4px; /* Move arrow above the circle */
+            z-index: 1;
+        }
+        /* --- End Custom North Arrow Styling --- */
+    </style>
+</head>
+<body class="overflow-hidden">
+
+    <!-- Map Container -->
+    <div id="map"></div>
+
+    <!-- Control Panel (Now draggable) -->
+    <div id="controls" class="bg-white rounded-lg shadow-xl max-w-xs">
+        <!-- Drag Handle -->
+        <div id="controls-header" class="bg-gray-100 p-2 rounded-t-lg cursor-move border-b border-gray-200">
+            <h3 class="text-base font-semibold text-gray-700 text-center">Map Controls (Drag Me)</h3>
+        </div>
+        
+        <!-- Content -->
+        <div class="p-4">
+            <!-- Basemap Switcher -->
+            <div class="mb-4">
+                <h3 class="text-lg font-semibold mb-2 text-gray-800">Basemap</h3>
+                <div class="flex items-center space-x-4">
+                    <label class="flex items-center cursor-pointer">
+                        <input type="radio" name="basemap" value="osm" id="basemap-osm" class="form-radio h-4 w-4 text-blue-600" checked>
+                        <span class="ml-2 text-gray-700">OpenStreetMap</span>
+                    </label>
+                    <label class="flex items-center cursor-pointer">
+                        <input type="radio" name="basemap" value="esri" id="basemap-esri" class="form-radio h-4 w-4 text-blue-600">
+                        <span class="ml-2 text-gray-700">ESRI Imagery</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Overlay Layers -->
+            <div>
+                <h3 class="text-lg font-semibold mb-2 text-gray-800">Overlays</h3>
+                <div class="space-y-2">
+                    <!-- US States WMS Toggle -->
+                    <label class="flex items-center cursor-pointer">
+                        <input type="checkbox" id="wms-toggle-states" class="form-checkbox h-5 w-5 text-blue-600 rounded">
+                        <span class="ml-2 text-gray-700">US States WMS</span>
+                    </label>
+                    
+                    <!-- Elevation Layer Toggle (Now Shaded Relief) -->
+                    <label class="flex items-center cursor-pointer">
+                        <input type="checkbox" id="wms-toggle-elevation" class="form-checkbox h-5 w-5 text-green-600 rounded">
+                        <span class="ml-2 text-gray-700">Elevation (Shaded Relief)</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- OpenLayers JS -->
+    <script src="https://cdn.jsdelivr.net/npm/ol@v9.1.0/dist/ol.js"></script>
+    <script type="module">
+        // Import necessary OpenLayers modules and controls
+        const { Map, View } = ol;
+        const { Tile: TileLayer } = ol.layer;
+        const { OSM, TileWMS, XYZ } = ol.source;
+        const { fromLonLat } = ol.proj;
+        // Accessing controls via ol.control to ensure compatibility
+        const { ScaleLine, Rotate } = ol.control; 
+
+        // 1. Define the Layers
+        
+        // OSM Basemap
+        const osmLayer = new TileLayer({
+            source: new OSM(),
+            visible: true, // Visible by default
+            zIndex: 0
+        });
+
+        // ESRI Imagery Basemap
+        const esriImageryLayer = new TileLayer({
+            source: new XYZ({
+                url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                attributions: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+                maxZoom: 19
+            }),
+            visible: false, // Hidden by default
+            zIndex: 0
+        });
+
+        // WMS Layer 1: US States (Original Request)
+        const wmsStatesLayer = new TileLayer({
+            source: new TileWMS({
+                url: 'https://ahocevar.com/geoserver/wms',
+                params: {
+                    'LAYERS': 'topp:states',
+                    'TILED': true
+                },
+                serverType: 'geoserver',
+                transition: 0,
+            }),
+            visible: false, // Hidden by default
+            zIndex: 1
+        });
+        
+        // GIS Layer 2: Elevation (ESRI World Shaded Relief XYZ Tile Layer - NEW Symbology)
+        const elevationLayer = new TileLayer({
+            source: new XYZ({
+                // Changed from World_Hillshade to World_Shaded_Relief for better color symbology
+                url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}',
+                attributions: 'Source: Esri, Garmin, USGS, NOAA',
+                maxZoom: 15
+            }),
+            opacity: 0.8, // Increased opacity for better color visibility
+            visible: false, 
+            zIndex: 2
+        });
+        
+        // NOTE: The populationDensityLayer has been removed.
+
+        // 2. Create the Map
+        const map = new Map({
+            target: 'map', // Links to the <div id="map">
+            layers: [
+                osmLayer,
+                esriImageryLayer,
+                wmsStatesLayer, // US States WMS
+                elevationLayer // Elevation Layer (now shaded relief)
+            ],
+            view: new View({
+                center: fromLonLat([-98.58, 39.83]), // Center of continental US
+                zoom: 4.5,
+            }),
+        });
+        
+        // 2b. Add controls explicitly after map creation
+        
+        // Add the ScaleLine control
+        map.addControl(new ScaleLine({
+            units: 'us', // Set to US units (miles/feet)
+            bar: true,   // Show as a bar
+            steps: 4,    // Number of segments
+            text: true,  // Show text labels
+            minWidth: 140 // Minimum width
+        }));
+        
+        // Add the Rotate control (North Arrow)
+        map.addControl(new Rotate({
+            autoHide: false, // Keep it visible even when rotation is zero (static look)
+            tipLabel: 'Reset map rotation',
+        }));
+
+
+        // 3. Add Event Listeners for Layer Controls
+
+        // Basemap Switcher
+        const basemapRadios = document.querySelectorAll('input[name="basemap"]');
+        basemapRadios.forEach(radio => {
+            radio.addEventListener('change', (event) => {
+                const value = event.target.value;
+                osmLayer.setVisible(value === 'osm');
+                esriImageryLayer.setVisible(value === 'esri');
+            });
+        });
+
+        // WMS States Toggle (Original)
+        const wmsStatesToggle = document.getElementById('wms-toggle-states');
+        wmsStatesToggle.addEventListener('change', (event) => {
+            wmsStatesLayer.setVisible(event.target.checked);
+        });
+
+        // Elevation Toggle 
+        const elevationToggle = document.getElementById('wms-toggle-elevation');
+        elevationToggle.addEventListener('change', (event) => {
+            elevationLayer.setVisible(event.target.checked);
+        });
+        
+        // NOTE: The population density toggle has been removed.
+
+        // 4. Make Controls Panel Draggable
+        const controlsPanel = document.getElementById('controls');
+        const controlsHeader = document.getElementById('controls-header');
+
+        let isDragging = false;
+        let offsetX, offsetY;
+
+        controlsHeader.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            // Get position of the panel
+            const rect = controlsPanel.getBoundingClientRect();
+            // Calculate offset from the mouse click to the panel's top-left corner
+            offsetX = e.clientX - rect.left;
+            offsetY = e.clientY - rect.top;
+
+            // Set cursor to grabbing
+            controlsHeader.style.cursor = 'grabbing';
+            // Prevent text selection
+            e.preventDefault();
+
+            // Set dragging flag for touch devices (optional, but good practice)
+            document.documentElement.classList.add('select-none'); 
+        }, { passive: false });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+
+            // Calculate new top-left position
+            const newX = e.clientX - offsetX;
+            const newY = e.clientY - offsetY;
+
+            // Ensure the panel remains positioned absolutely
+            controlsPanel.style.left = `${newX}px`;
+            controlsPanel.style.top = `${newY}px`;
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                controlsHeader.style.cursor = 'move'; // Reset cursor
+                document.documentElement.classList.remove('select-none');
+            }
+        });
+
+        // Optional: Touch support for dragging
+        controlsHeader.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+                const touch = e.touches[0];
+                const rect = controlsPanel.getBoundingClientRect();
+                offsetX = touch.clientX - rect.left;
+                offsetY = touch.clientY - rect.top;
+                isDragging = true;
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        document.addEventListener('touchmove', (e) => {
+            if (!isDragging || e.touches.length !== 1) return;
+            const touch = e.touches[0];
+            const newX = touch.clientX - offsetX;
+            const newY = touch.clientY - offsetY;
+            controlsPanel.style.left = `${newX}px`;
+            controlsPanel.style.top = `${newY}px`;
+        }, { passive: false });
+
+        document.addEventListener('touchend', () => {
+            isDragging = false;
+        });
+
+    </script>
+</body>
+</html>
